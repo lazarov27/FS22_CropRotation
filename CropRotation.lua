@@ -104,6 +104,7 @@ function CropRotation:initialize()
 
         self.isVisualizeEnabled = false
         addConsoleCommand("crVisualize", "Toggle Crop Rotation visualization", "commandToggleVisualize", self)
+        addConsoleCommand("crRandomInit", "Initialize NPC fields to random value", "commandRandomInit", self)
     end
 end
 
@@ -295,6 +296,7 @@ function CropRotation:deleteMap()
             removeConsoleCommand("crHarvestClear")
 
             removeConsoleCommand("crVisualizeToggle")
+            removeConsoleCommand("crRandomInit")
         end
 
         self.densityMapUpdater:unregister("UpdateFallow")
@@ -363,7 +365,7 @@ function CropRotation:update(dt)
             end
         end
 
-        if CropRotation.DEBUG and self.isVisualizeEnabled then
+        if self.isVisualizeEnabled then
             self:visualize()
         end
 
@@ -462,6 +464,8 @@ function CropRotation:randomInit()
 
     local terrainSize = g_currentMission.terrainSize or 1024
 
+    self.log:debug(string.format("CropRotation:randomInit(): terrainSize = %d", terrainSize))
+
     -- initialize random forecrop generator
     local keys = {}
     for key, forecrops in pairs(self.data.matrix) do
@@ -483,7 +487,6 @@ function CropRotation:randomInit()
             r1 = keys[math.random(#keys)]
         end
 
-        -- local bits = self:encode(r2, r1, 0, 0)
         for index = 1, table.getn(field.maxFieldStatusPartitions) do
             local partition = field.maxFieldStatusPartitions[index]
 
@@ -650,7 +653,7 @@ end
 
 FSBaseMission.initTerrain = Utils.appendedFunction(FSBaseMission.initTerrain, postInitTerrain)
 
-function CropRotation:loadMapDataHelpLineManager(superFunc, ...)
+function CropRotation:loadCropRotationHelpLine(superFunc, ...)
 	local ret = superFunc(self, ...)
 	if ret then
 		self:loadFromXML(Utils.getFilename("gui/helpLine.xml", g_cropRotation.MOD_DIRECTORY))
@@ -659,7 +662,7 @@ function CropRotation:loadMapDataHelpLineManager(superFunc, ...)
 	return false
 end
 
-HelpLineManager.loadMapData = Utils.overwrittenFunction( HelpLineManager.loadMapData, CropRotation.loadMapDataHelpLineManager)
+HelpLineManager.loadMapData = Utils.overwrittenFunction( HelpLineManager.loadMapData, CropRotation.loadCropRotationHelpLine)
 
 ------------------------------------------------
 --- Vanilla Player HUD Updater
@@ -845,7 +848,7 @@ end
 
 function CropRotation.inj_densityMapUtil_updateSowingArea(superFunc, fruitIndex, startWorldX, startWorldZ, widthWorldX, widthWorldZ, heightWorldX, heightWorldZ, fieldGroundType, angle, growthState, blockedSprayTypeIndex)
     local fruitDesc = g_fruitTypeManager:getFruitTypeByIndex(fruitIndex)
-    if fruitDesc and fruitDesc.rotation.enabled then
+    if fruitDesc and fruitDesc.rotation and fruitDesc.rotation.enabled then
         local modifiers = g_cropRotation.modifiers
 
         local terrainSize = g_currentMission.terrainSize or 1024
@@ -922,7 +925,7 @@ function CropRotation.inj_densityMapUtil_cutFruitArea(superFunc, fruitIndex, sta
         --     cropRotation.modifiers.map.filterH
         -- )
 
-        local terrainSize = g_currentMission.terrainSize
+        local terrainSize = g_currentMission.terrainSize or 1024
         cropRotation.modifiers.harvest.modifier:setParallelogramUVCoords(
             startWorldX  / terrainSize + 0.5,
             startWorldZ  / terrainSize + 0.5,
@@ -1086,7 +1089,10 @@ function CropRotation:getRotationYieldMultiplier(prevIndex, lastIndex, currentIn
 end
 
 function CropRotation:getRotationReturnPeriodMultiplier(prev, last, current)
-    local returnPeriod = current.rotation.returnPeriod
+    local returnPeriod = 3
+    if current.rotation then
+        returnPeriod = current.rotation.returnPeriod
+    end
 
     -- monoculture
     local result = 0.0 - ((current.index == last and current.index == prev) and 0.05 or 0)
@@ -1384,10 +1390,12 @@ function CropRotation:setPrev(x,z,radius,index)
     modifier:executeSet(index)
 end
 
+function CropRotation:commandRandomInit()
+    self:randomInit()
+end
+
 function CropRotation:commandToggleVisualize()
-    if CropRotation.DEBUG then
         self.isVisualizeEnabled = not self.isVisualizeEnabled
-    end
 end
 
 
